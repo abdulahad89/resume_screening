@@ -134,8 +134,8 @@ class HuggingFaceEmbeddingManager:
         except:
             pass  # Ignore cache save errors
     
-    def _call_hf_api(self, text: str, retry_count: int = 0) -> Optional[np.ndarray]:
-        """Call Hugging Face Inference API"""
+        def _call_hf_api(self, text: str, retry_count: int = 0) -> Optional[np.ndarray]:
+        """Call Hugging Face Inference API with correct format"""
         
         # Skip if we know the API isn't working
         if not self.api_status.get("token_valid", False):
@@ -144,8 +144,10 @@ class HuggingFaceEmbeddingManager:
         try:
             url = f"{self.api_url}/models/{self.model_name}"
             
+            # FIXED: Use correct format for sentence-transformers models
+            # Send as array of sentences, not single input
             payload = {
-                "inputs": text,
+                "inputs": [text],  # Array format required for sentence-transformers
                 "options": {
                     "wait_for_model": True,
                     "use_cache": True
@@ -164,17 +166,14 @@ class HuggingFaceEmbeddingManager:
                 try:
                     result = response.json()
                     
-                    # Handle different response formats
+                    # Handle sentence-transformers response format
                     if isinstance(result, list) and len(result) > 0:
-                        # Standard sentence-transformers format
+                        # Result should be array of embeddings
                         if isinstance(result[0], list):
-                            embedding = np.array(result[0])  # First element if nested
+                            # Take first embedding (since we sent one sentence)
+                            embedding = np.array(result[0])
                         else:
                             embedding = np.array(result)
-                        return embedding
-                    elif isinstance(result, dict) and 'embeddings' in result:
-                        # Alternative format
-                        embedding = np.array(result['embeddings'])
                         return embedding
                     else:
                         st.error(f"Unexpected API response format: {type(result)}")
