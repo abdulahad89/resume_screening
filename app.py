@@ -36,10 +36,6 @@ if 'screening_results' not in st.session_state:
     st.session_state.screening_results = []
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
-    
-# Add this temporarily at the top of your main() function
-st.write("Debug - HF Token exists:", len(HUGGINGFACE_TOKEN) > 0)
-st.write("Debug - Token starts with:", HUGGINGFACE_TOKEN[:10] if HUGGINGFACE_TOKEN else "None")
 
 def main():
     # Header with model info
