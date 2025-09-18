@@ -10,7 +10,7 @@ try:
 except:
     HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 
-# Rest of your config remains the same...
+# Embedding Models - Use feature extraction compatible models
 HF_EMBEDDING_MODELS = {
     "mpnet": "sentence-transformers/all-mpnet-base-v2",
     "distilbert": "sentence-transformers/all-distilroberta-v1", 
@@ -20,9 +20,10 @@ HF_EMBEDDING_MODELS = {
     "e5_large": "intfloat/e5-large-v2",
 }
 
+# Use the best embedding model
 EMBEDDING_MODEL = HF_EMBEDDING_MODELS["mpnet"]
 
-# Chat models and other settings
+# Chat models (optional)
 HF_CHAT_MODELS = {
     "phi3": "microsoft/Phi-3-mini-4k-instruct",
     "llama": "meta-llama/Llama-2-7b-chat-hf", 
@@ -31,7 +32,7 @@ HF_CHAT_MODELS = {
 
 CHAT_MODEL = HF_CHAT_MODELS["phi3"]
 
-# Ollama backup config
+# Ollama backup config (optional)
 OLLAMA_URL = "http://localhost:11434"
 OLLAMA_MODEL = "phi3:mini"
 
@@ -40,11 +41,11 @@ UPLOAD_FOLDER = "./data/uploads"
 VECTOR_STORE_PATH = "./data/vector_store"
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
-# Scoring weights
+# Scoring weights for similarity calculation
 SCORING_WEIGHTS = {
-    "semantic": 0.5,
-    "keyword_categories": 0.35,
-    "tfidf": 0.15
+    "semantic": 0.5,      # HF embeddings weight
+    "keyword_categories": 0.35,  # Skill matching weight  
+    "tfidf": 0.15         # Text similarity weight
 }
 
 # Thresholds
@@ -56,52 +57,62 @@ HF_TIMEOUT = 30
 MAX_RETRIES = 3
 CACHE_EMBEDDINGS = True
 
-# Your skill categories and job templates go here...
+# Comprehensive skill categories for resume analysis
 SKILL_CATEGORIES = {
     'programming_languages': [
         'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'r', 'sql', 
-        'scala', 'go', 'rust', 'php', 'ruby', 'swift', 'kotlin', 'matlab'
+        'scala', 'go', 'rust', 'php', 'ruby', 'swift', 'kotlin', 'matlab',
+        'perl', 'bash', 'powershell', 'vba'
     ],
     'frameworks_libraries': [
         'react', 'angular', 'vue', 'node.js', 'express', 'django', 'flask',
         'spring', 'tensorflow', 'pytorch', 'scikit-learn', 'pandas', 'numpy',
-        'keras', 'opencv', 'bootstrap', 'jquery', 'laravel', 'rails'
+        'keras', 'opencv', 'bootstrap', 'jquery', 'laravel', 'rails',
+        'fastapi', 'streamlit', 'dash', 'plotly', 'matplotlib', 'seaborn'
     ],
     'databases': [
         'mysql', 'postgresql', 'mongodb', 'redis', 'elasticsearch', 'cassandra',
-        'oracle', 'sql server', 'sqlite', 'dynamodb', 'neo4j', 'bigquery'
+        'oracle', 'sql server', 'sqlite', 'dynamodb', 'neo4j', 'bigquery',
+        'snowflake', 'clickhouse', 'mariadb'
     ],
     'cloud_platforms': [
         'aws', 'azure', 'gcp', 'google cloud', 'amazon web services',
-        'microsoft azure', 'digital ocean', 'heroku', 'netlify', 'vercel'
+        'microsoft azure', 'digital ocean', 'heroku', 'netlify', 'vercel',
+        'alibaba cloud', 'oracle cloud'
     ],
     'data_science_tools': [
         'tableau', 'power bi', 'matplotlib', 'seaborn', 'plotly', 'qlik',
-        'looker', 'jupyter', 'r studio', 'spss', 'sas', 'alteryx', 'databricks'
+        'looker', 'jupyter', 'r studio', 'spss', 'sas', 'alteryx', 'databricks',
+        'apache spark', 'hadoop', 'airflow', 'dbt'
     ],
     'devops_tools': [
         'docker', 'kubernetes', 'jenkins', 'git', 'gitlab', 'github',
-        'terraform', 'ansible', 'puppet', 'chef', 'nginx', 'prometheus'
+        'terraform', 'ansible', 'puppet', 'chef', 'nginx', 'prometheus',
+        'grafana', 'elk stack', 'splunk'
     ],
     'marketing_tools': [
         'google analytics', 'google ads', 'facebook ads', 'hubspot', 'marketo',
-        'salesforce', 'mailchimp', 'hootsuite', 'semrush', 'ahrefs', 'optimizely'
+        'salesforce', 'mailchimp', 'hootsuite', 'semrush', 'ahrefs', 'optimizely',
+        'mixpanel', 'amplitude', 'klaviyo', 'pardot'
     ],
     'methodologies': [
         'agile', 'scrum', 'kanban', 'waterfall', 'lean', 'six sigma',
-        'design thinking', 'test driven development', 'devops', 'continuous integration'
+        'design thinking', 'test driven development', 'devops', 'continuous integration',
+        'continuous deployment', 'microservices', 'event driven architecture'
     ],
     'business_tools': [
         'excel', 'powerpoint', 'jira', 'confluence', 'asana', 'trello',
-        'figma', 'sketch', 'visio', 'slack', 'teams', 'notion'
+        'figma', 'sketch', 'visio', 'slack', 'teams', 'notion',
+        'monday.com', 'clickup', 'smartsheet'
     ],
     'certifications': [
         'pmp', 'aws certified', 'azure certified', 'google certified',
-        'cissp', 'scrum master', 'product owner', 'six sigma', 'itil'
+        'cissp', 'scrum master', 'product owner', 'six sigma', 'itil',
+        'cpa', 'cfa', 'frm', 'prince2'
     ]
 }
 
-# Job templates
+# Job templates optimized for AI matching
 JOB_TEMPLATES = {
     "Data Scientist": """
     Data Scientist position requiring expertise in machine learning algorithms, statistical modeling,
@@ -131,7 +142,8 @@ JOB_TEMPLATES = {
     customer lifetime value modeling, attribution modeling across multiple touchpoints and channels.
     
     Digital marketing channels expertise: search engine optimization (SEO) and search engine marketing (SEM),
-    social media advertising across platforms, email marketing performance tracking, campaign ROI measurement.
+    social media advertising across platforms, email marketing performance tracking, campaign ROI measurement,
+    marketing mix modeling, cohort analysis, and customer journey mapping.
     """,
     
     "Software Engineer": """
@@ -141,32 +153,39 @@ JOB_TEMPLATES = {
     microservices architecture, Docker containerization, Kubernetes orchestration, cloud deployment on AWS/Azure/GCP.
     
     DevOps practices: CI/CD pipelines with Jenkins or GitHub Actions, infrastructure as code with Terraform,
-    monitoring and logging, version control with Git, agile development methodologies, test-driven development,
-    code review processes, system design and architecture planning, performance optimization and scalability.
+    monitoring and logging with Prometheus, Grafana, ELK stack, version control with Git, agile development methodologies,
+    test-driven development, code review processes, system design and architecture planning, performance optimization
+    and scalability, security best practices, and cross-functional collaboration.
+    
+    Experience with modern development tools: IDE proficiency, debugging techniques, automated testing frameworks,
+    code quality tools, documentation practices, and technical mentoring capabilities.
     """
 }
 
 # Directory creation function
 def create_directories():
+    """Create necessary directories for the application"""
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
     os.makedirs("./data/embeddings_cache", exist_ok=True)
     os.makedirs("./logs", exist_ok=True)
 
-# Model info function
+# Model information function
 def get_model_info():
+    """Get information about the current embedding model"""
     model_name = EMBEDDING_MODEL.split('/')[-1] if '/' in EMBEDDING_MODEL else EMBEDDING_MODEL
     return {
         "name": model_name,
         "full_name": EMBEDDING_MODEL,
         "provider": "Hugging Face Inference API",
-        "type": "Remote Inference",
+        "type": "Feature Extraction",
         "description": "High-quality embeddings via Hugging Face cloud infrastructure",
         "advantages": [
             "No local model downloads or storage",
-            "Always latest model version",
-            "Scalable cloud infrastructure", 
+            "Always latest model version", 
+            "Scalable cloud infrastructure",
             "Reduced local memory usage",
-            "Faster application startup"
+            "Faster application startup",
+            "Professional-grade accuracy"
         ]
     }
