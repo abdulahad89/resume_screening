@@ -1,4 +1,5 @@
-import PyMuPDF as fitz
+# import PyMuPDF as fitz
+import fitz as fitz
 import docx
 import re
 from typing import Dict, List, Any
@@ -265,8 +266,6 @@ class EnhancedResumeParser:
                     r'^([^,\n]+?)\s*[-–—]\s*([^,\n]+?)(?:\s*[\|\-,]\s*(.+))?$',
                     # "Job Title, Company Name"
                     r'^([^,\n]+?),\s*([^,\n]+?)(?:\s*[\|\-,]\s*(.+))?$',
-                    # "Company Name - Job Title"
-                    r'^([^,\n]+?)\s*[-–—]\s*([^,\n]+?)(?:\s*[\|\-,]\s*(.+))?$'
                 ]
                 
                 for pattern in job_patterns:
@@ -299,13 +298,14 @@ class EnhancedResumeParser:
                             current_job = len(experience) - 1
                         break
                 
-                # If we have a current job, add description lines
-                elif current_job is not None and len(experience) > current_job:
-                    if line.startswith('•') or line.startswith('-') or line.startswith('*'):
-                        if experience[current_job]['description']:
-                            experience[current_job]['description'] += ' ' + line
-                        else:
-                            experience[current_job]['description'] = line
+                # FIXED: Correct indentation and logic for description lines
+                # This should be at the same level as the job_patterns loop above
+            if current_job is not None and current_job < len(experience):
+                if line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                    if experience[current_job]['description']:
+                        experience[current_job]['description'] += ' ' + line
+                    else:
+                        experience[current_job]['description'] = line
         
         return experience[:8]  # Limit to reasonable number
     
