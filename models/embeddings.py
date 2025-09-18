@@ -11,7 +11,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 class HuggingFaceEmbeddingManager:
-    """Production-ready embedding manager using Hugging Face Inference API"""
+    """Production-ready embedding manager using Hugging Face Feature Extraction API"""
     
     def __init__(self):
         from config import (
@@ -66,12 +66,16 @@ class HuggingFaceEmbeddingManager:
             return status
         
         try:
-            # Simple GET request to check model availability
-            test_url = f"{self.api_url}/models/{self.model_name}"
+            # Test with feature extraction endpoint
+            test_url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.model_name}"
             
-            response = requests.get(
+            # Simple test payload
+            test_payload = {"inputs": ["test"]}
+            
+            response = requests.post(
                 test_url,
                 headers=self.headers,
+                json=test_payload,
                 timeout=10
             )
             
@@ -86,10 +90,11 @@ class HuggingFaceEmbeddingManager:
             elif response.status_code == 404:
                 status["error"] = f"Model {self.model_name} not found"
             elif response.status_code == 503:
-                # Model is loading - this is actually OK for inference
+                # Model is loading - this is OK
                 status["connected"] = True
                 status["token_valid"] = True
                 status["model_available"] = True
+                status["note"] = "Model is loading (normal on first use)"
             else:
                 status["error"] = f"API returned status {response.status_code}"
                 
@@ -141,17 +146,18 @@ class HuggingFaceEmbeddingManager:
             pass
     
     def _call_hf_api(self, text: str, retry_count: int = 0) -> Optional[np.ndarray]:
-        """Call Hugging Face Inference API with correct sentence-transformers format"""
+        """Call Hugging Face Feature Extraction API for embeddings"""
         
         if not self.api_status.get("token_valid", False):
             raise Exception("Invalid or missing Hugging Face token")
         
         try:
-            url = f"{self.api_url}/models/{self.model_name}"
+            # Use the feature extraction pipeline endpoint
+            url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.model_name}"
             
-            # CRITICAL FIX: sentence-transformers requires array format
+            # CORRECT FORMAT for feature extraction
             payload = {
-                "inputs": [text]  # MUST be array format, not string!
+                "inputs": [text]  # Array format for feature extraction
             }
             
             response = requests.post(
@@ -165,7 +171,7 @@ class HuggingFaceEmbeddingManager:
                 try:
                     result = response.json()
                     
-                    # Handle sentence-transformers response format
+                    # Handle feature extraction response format
                     if isinstance(result, list) and len(result) > 0:
                         if isinstance(result[0], list):
                             # Standard format: [[embedding_vector]]
@@ -203,7 +209,7 @@ class HuggingFaceEmbeddingManager:
             
             else:
                 # Handle error response
-                error_msg = f"HF API Error {response.status_code}"
+                error_msg = f"Feature Extraction API Error {response.status_code}"
                 try:
                     error_detail = response.json()
                     if 'error' in error_detail:
@@ -281,14 +287,14 @@ class HuggingFaceEmbeddingManager:
         return found_keywords
     
     def encode_text(self, text: str) -> np.ndarray:
-        """Generate embedding for text using HF API with caching"""
+        """Generate embedding for text using HF Feature Extraction API"""
         if not text or not text.strip():
             return self._create_fallback_embedding("")
         
         # Preprocess text
         clean_text = self.preprocess_text_advanced(text)
         
-        # Truncate if too long
+        # Truncate if too long (most models have ~512 token limit)
         if len(clean_text) > 500:
             clean_text = clean_text[:500]
         
@@ -298,13 +304,13 @@ class HuggingFaceEmbeddingManager:
         if cached_embedding is not None:
             return cached_embedding
         
-        # Call HF API
+        # Call HF Feature Extraction API
         try:
             with st.spinner("🤖 Getting embedding from Hugging Face..."):
                 embedding = self._call_hf_api(clean_text)
             
             if embedding is not None and embedding.size > 0:
-                # Normalize embedding
+                # Normalize embedding for cosine similarity
                 norm = np.linalg.norm(embedding)
                 if norm > 0:
                     embedding = embedding / norm
@@ -327,6 +333,7 @@ class HuggingFaceEmbeddingManager:
         embeddings = []
         
         for i, text in enumerate(texts):
+            # Rate limiting to avoid overwhelming the API
             if i > 0 and i % 5 == 0:
                 time.sleep(1)
             
@@ -354,18 +361,18 @@ class HuggingFaceEmbeddingManager:
             len(text),
         ])
         
-        # Technology keywords
+        # Technology keywords presence
         tech_keywords = [
             'python', 'java', 'javascript', 'react', 'sql', 'aws', 'docker',
             'kubernetes', 'git', 'linux', 'tensorflow', 'pytorch', 'pandas',
             'numpy', 'machine learning', 'data science', 'api', 'database',
-            'cloud', 'devops', 'agile', 'scrum'
+            'cloud', 'devops', 'agile', 'scrum', 'marketing', 'analytics'
         ]
         
         for keyword in tech_keywords:
             features.append(1.0 if keyword in text_lower else 0.0)
         
-        # Experience indicators
+        # Experience level indicators
         experience_indicators = [
             'senior', 'lead', 'principal', 'manager', 'director',
             'junior', 'intern', 'entry', 'years', 'experience'
@@ -383,7 +390,7 @@ class HuggingFaceEmbeddingManager:
         for keyword in education_keywords:
             features.append(1.0 if keyword in text_lower else 0.0)
         
-        # Pad to standard size
+        # Pad to standard embedding size (384 dimensions)
         while len(features) < 384:
             features.append(0.0)
         
@@ -416,7 +423,7 @@ class HuggingFaceEmbeddingManager:
             return 0.0
     
     def calculate_tfidf_similarity(self, text1: str, text2: str) -> float:
-        """Calculate TF-IDF similarity"""
+        """Calculate TF-IDF similarity for keyword matching"""
         try:
             if not text1.strip() or not text2.strip():
                 return 0.0
@@ -435,7 +442,7 @@ class HuggingFaceEmbeddingManager:
             return 0.0
     
     def calculate_keyword_similarity(self, jd_keywords: Dict, resume_keywords: Dict) -> Dict:
-        """Calculate keyword similarity by category"""
+        """Calculate detailed keyword similarity by category"""
         category_scores = {}
         overall_scores = []
         
@@ -463,24 +470,34 @@ class HuggingFaceEmbeddingManager:
         }
     
     def hybrid_similarity_analysis(self, jd_text: str, resume_text: str) -> Dict:
-        """Comprehensive similarity analysis"""
+        """Comprehensive similarity analysis combining multiple methods"""
         
-        # Extract keywords
+        # Extract keywords from both texts
         jd_keywords = self.extract_enhanced_keywords(jd_text)
         resume_keywords = self.extract_enhanced_keywords(resume_text)
         
-        # Calculate similarities
+        # Calculate different similarity metrics
         semantic_score = self.calculate_semantic_similarity(jd_text, resume_text)
         tfidf_score = self.calculate_tfidf_similarity(jd_text, resume_text)
         keyword_analysis = self.calculate_keyword_similarity(jd_keywords, resume_keywords)
         
-        # Combined score
+        # Calculate combined score using configured weights
         from config import SCORING_WEIGHTS
         combined_score = (
             semantic_score * SCORING_WEIGHTS['semantic'] +
             keyword_analysis['overall_score'] * SCORING_WEIGHTS['keyword_categories'] +
             tfidf_score * SCORING_WEIGHTS['tfidf']
         )
+        
+        # Create analysis summary
+        if combined_score >= 0.7:
+            summary = "Excellent match - candidate strongly aligns with job requirements"
+        elif combined_score >= 0.5:
+            summary = "Good match - candidate meets most requirements with minor gaps"
+        elif combined_score >= 0.3:
+            summary = "Moderate match - candidate has relevant skills but notable gaps"
+        else:
+            summary = "Limited match - significant gaps in required qualifications"
         
         return {
             'combined': combined_score,
@@ -491,22 +508,24 @@ class HuggingFaceEmbeddingManager:
             'jd_keywords': jd_keywords,
             'resume_keywords': resume_keywords,
             'model_used': self.model_name,
-            'api_provider': 'Hugging Face Inference API'
+            'api_provider': 'Hugging Face Feature Extraction API',
+            'analysis_summary': summary
         }
     
     def get_model_info(self) -> Dict:
-        """Get model information"""
+        """Get comprehensive model information"""
         return {
             'name': self.model_name.split('/')[-1],
             'full_name': self.model_name,
             'provider': 'Hugging Face',
-            'type': 'Remote Inference API',
+            'type': 'Feature Extraction API',
             'status': self.api_status,
-            'cache_enabled': self.cache_enabled
+            'cache_enabled': self.cache_enabled,
+            'endpoint': f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.model_name}"
         }
     
     def clear_cache(self):
-        """Clear embedding cache"""
+        """Clear embedding cache and show results"""
         try:
             import shutil
             cache_files = 0
@@ -520,3 +539,24 @@ class HuggingFaceEmbeddingManager:
             
         except Exception as e:
             st.error(f"❌ Failed to clear cache: {e}")
+    
+    def get_cache_stats(self) -> Dict:
+        """Get cache statistics for monitoring"""
+        try:
+            if not os.path.exists(self.cache_dir):
+                return {'enabled': self.cache_enabled, 'files': 0, 'size_mb': 0}
+            
+            cache_files = [f for f in os.listdir(self.cache_dir) if f.endswith('.npy')]
+            total_size = sum(
+                os.path.getsize(os.path.join(self.cache_dir, f)) 
+                for f in cache_files
+            )
+            
+            return {
+                'enabled': self.cache_enabled,
+                'files': len(cache_files),
+                'size_mb': round(total_size / (1024 * 1024), 2)
+            }
+            
+        except Exception:
+            return {'enabled': self.cache_enabled, 'files': 0, 'size_mb': 0}
