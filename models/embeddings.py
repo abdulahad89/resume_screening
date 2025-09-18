@@ -44,7 +44,7 @@ class HuggingFaceEmbeddingManager:
             "Content-Type": "application/json"
         }
         
-        # Test API connection on initialization
+        # Test API connection on initialization (with better error handling)
         self.api_status = self._test_api_connection()
     
     def _test_api_connection(self) -> Dict[str, Any]:
@@ -57,40 +57,45 @@ class HuggingFaceEmbeddingManager:
         }
         
         if not self.token:
-            status["error"] = "No Hugging Face token provided. Set HUGGINGFACE_TOKEN in .env file"
+            status["error"] = "No Hugging Face token provided"
+            return status
+        
+        if len(self.token) < 10:
+            status["error"] = "Invalid token format"
             return status
         
         try:
-            # Test with a simple embedding request
+            # Use a simpler API endpoint for testing
             test_url = f"{self.api_url}/models/{self.model_name}"
-            response = requests.post(
-                test_url,
-                headers=self.headers,
-                json={"inputs": "test connection"},
-                timeout=10
-            )
+            
+            # Make a simple GET request first (lighter than POST)
+            response = requests.get(test_url, headers=self.headers, timeout=10)
             
             if response.status_code == 200:
                 status["connected"] = True
-                status["model_available"] = True
                 status["token_valid"] = True
+                status["model_available"] = True
             elif response.status_code == 401:
                 status["error"] = "Invalid Hugging Face token"
             elif response.status_code == 403:
-                status["error"] = "Access denied - check token permissions"
+                status["error"] = "Token doesn't have required permissions"
+            elif response.status_code == 404:
+                status["error"] = f"Model {self.model_name} not found"
             elif response.status_code == 503:
-                status["error"] = "Model is loading, please wait a moment"
+                # Model is loading - this is actually OK
                 status["connected"] = True
                 status["token_valid"] = True
+                status["model_available"] = True
+                status["error"] = "Model is loading (this is normal)"
             else:
-                status["error"] = f"API error: HTTP {response.status_code}"
+                status["error"] = f"API returned status {response.status_code}"
                 
         except requests.exceptions.ConnectionError:
-            status["error"] = "No internet connection"
+            status["error"] = "No internet connection or API unreachable"
         except requests.exceptions.Timeout:
-            status["error"] = "API timeout - check connection"
+            status["error"] = "API request timed out"
         except Exception as e:
-            status["error"] = f"Unexpected error: {str(e)}"
+            status["error"] = f"Connection test failed: {str(e)}"
         
         return status
     
@@ -113,7 +118,8 @@ class HuggingFaceEmbeddingManager:
                 return np.load(cache_file)
             except:
                 # Remove corrupted cache file
-                os.remove(cache_file)
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
                 return None
         return None
     
@@ -122,8 +128,8 @@ class HuggingFaceEmbeddingManager:
         if not self.cache_enabled:
             return
         
-        cache_file = os.path.join(self.cache_dir, f"{cache_key}.npy")
         try:
+            cache_file = os.path.join(self.cache_dir, f"{cache_key}.npy")
             np.save(cache_file, embedding)
         except:
             pass  # Ignore cache save errors
@@ -131,8 +137,9 @@ class HuggingFaceEmbeddingManager:
     def _call_hf_api(self, text: str, retry_count: int = 0) -> Optional[np.ndarray]:
         """Call Hugging Face Inference API"""
         
-        if not self.api_status["token_valid"]:
-            raise Exception("Invalid Hugging Face token")
+        # Skip if we know the API isn't working
+        if not self.api_status.get("token_valid", False):
+            raise Exception("Invalid or missing Hugging Face token")
         
         try:
             url = f"{self.api_url}/models/{self.model_name}"
@@ -153,26 +160,34 @@ class HuggingFaceEmbeddingManager:
             )
             
             if response.status_code == 200:
-                # Parse response - format depends on model type
-                result = response.json()
-                
-                # Handle different response formats
-                if isinstance(result, list) and len(result) > 0:
-                    # Standard sentence-transformers format
-                    embedding = np.array(result)
-                    return embedding
-                elif isinstance(result, dict) and 'embeddings' in result:
-                    # Alternative format
-                    embedding = np.array(result['embeddings'])
-                    return embedding
-                else:
-                    st.error(f"Unexpected API response format: {type(result)}")
+                # Parse response
+                try:
+                    result = response.json()
+                    
+                    # Handle different response formats
+                    if isinstance(result, list) and len(result) > 0:
+                        # Standard sentence-transformers format
+                        if isinstance(result[0], list):
+                            embedding = np.array(result[0])  # First element if nested
+                        else:
+                            embedding = np.array(result)
+                        return embedding
+                    elif isinstance(result, dict) and 'embeddings' in result:
+                        # Alternative format
+                        embedding = np.array(result['embeddings'])
+                        return embedding
+                    else:
+                        st.error(f"Unexpected API response format: {type(result)}")
+                        return None
+                        
+                except Exception as e:
+                    st.error(f"Error parsing API response: {e}")
                     return None
             
             elif response.status_code == 503 and retry_count < self.max_retries:
                 # Model is loading, retry after delay
-                wait_time = min(10 + retry_count * 5, 30)  # Progressive backoff
-                st.warning(f"Model loading... retrying in {wait_time}s")
+                wait_time = min(10 + retry_count * 5, 30)
+                st.info(f"Model loading... retrying in {wait_time}s")
                 time.sleep(wait_time)
                 return self._call_hf_api(text, retry_count + 1)
             
@@ -183,7 +198,14 @@ class HuggingFaceEmbeddingManager:
                 return self._call_hf_api(text, retry_count + 1)
             
             else:
-                error_msg = f"HF API Error {response.status_code}: {response.text}"
+                error_msg = f"HF API Error {response.status_code}"
+                try:
+                    error_detail = response.json()
+                    if 'error' in error_detail:
+                        error_msg += f": {error_detail['error']}"
+                except:
+                    error_msg += f": {response.text[:200]}"
+                
                 if retry_count == 0:  # Only log on first attempt
                     st.error(error_msg)
                 return None
@@ -252,6 +274,10 @@ class HuggingFaceEmbeddingManager:
         # Preprocess text
         clean_text = self.preprocess_text_advanced(text)
         
+        # Truncate if too long (HF has input limits)
+        if len(clean_text) > 500:
+            clean_text = clean_text[:500]
+        
         # Try cache first
         cache_key = self._get_cache_key(clean_text)
         cached_embedding = self._load_from_cache(cache_key)
@@ -264,8 +290,12 @@ class HuggingFaceEmbeddingManager:
                 embedding = self._call_hf_api(clean_text)
             
             if embedding is not None:
-                # Normalize embedding
-                embedding = embedding / np.linalg.norm(embedding)
+                # Ensure proper shape and normalize
+                if embedding.ndim == 1:
+                    embedding = embedding / np.linalg.norm(embedding)
+                else:
+                    embedding = embedding.flatten()
+                    embedding = embedding / np.linalg.norm(embedding)
                 
                 # Save to cache
                 self._save_to_cache(cache_key, embedding)
@@ -296,18 +326,29 @@ class HuggingFaceEmbeddingManager:
     def _create_fallback_embedding(self, text: str) -> np.ndarray:
         """Create simple fallback embedding when API fails"""
         # Create basic text features
-        features = [
-            len(text.split()),  # Word count
-            len(set(text.lower().split())),  # Unique words
-            text.count('.'),  # Sentences
-            len([w for w in text.lower().split() if w in ['python', 'java', 'javascript']]),  # Tech words
-        ]
+        features = []
+        
+        # Text statistics
+        features.append(len(text.split()))  # Word count
+        features.append(len(set(text.lower().split())))  # Unique words
+        features.append(text.count('.'))  # Sentences
+        
+        # Technology keywords
+        tech_words = ['python', 'java', 'javascript', 'react', 'sql', 'aws', 'docker']
+        for word in tech_words:
+            features.append(1 if word in text.lower() else 0)
+        
+        # Experience indicators
+        exp_words = ['years', 'experience', 'senior', 'lead', 'manager']
+        for word in exp_words:
+            features.append(1 if word in text.lower() else 0)
         
         # Pad to standard embedding size (384 for compatibility)
         while len(features) < 384:
             features.append(0.0)
         
-        return np.array(features[:384])
+        embedding = np.array(features[:384], dtype=np.float32)
+        return embedding / (np.linalg.norm(embedding) + 1e-8)  # Normalize with epsilon
     
     def calculate_semantic_similarity(self, text1: str, text2: str) -> float:
         """Calculate semantic similarity using HF embeddings"""
@@ -316,9 +357,15 @@ class HuggingFaceEmbeddingManager:
             embedding1 = self.encode_text(text1)
             embedding2 = self.encode_text(text2)
             
+            # Ensure same shape
+            if embedding1.shape != embedding2.shape:
+                min_len = min(len(embedding1), len(embedding2))
+                embedding1 = embedding1[:min_len]
+                embedding2 = embedding2[:min_len]
+            
             # Calculate cosine similarity
             similarity = float(cosine_similarity([embedding1], [embedding2])[0][0])
-            return max(0.0, similarity)
+            return max(0.0, min(1.0, similarity))  # Clamp to [0, 1]
             
         except Exception as e:
             st.error(f"Similarity calculation error: {e}")
