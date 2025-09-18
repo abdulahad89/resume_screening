@@ -1,129 +1,62 @@
 import os
-from typing import Dict
+import streamlit as st
 
-# Hugging Face Configuration
+# Hugging Face Configuration  
 HUGGINGFACE_API_URL = "https://api-inference.huggingface.co"
-HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")  # Set your HF token in .env file
 
-# Available Hugging Face Models for Inference
+# Try to get token from Streamlit secrets first, then environment
+try:
+    HUGGINGFACE_TOKEN = st.secrets["HUGGINGFACE_TOKEN"]
+except:
+    HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
+
+# Rest of your config remains the same...
 HF_EMBEDDING_MODELS = {
-    # Sentence Transformers models (recommended)
-    "mpnet": "sentence-transformers/all-mpnet-base-v2",      # Best quality
-    "distilbert": "sentence-transformers/all-distilroberta-v1", # Good balance  
-    "minilm": "sentence-transformers/all-MiniLM-L6-v2",     # Fastest
-    "roberta": "sentence-transformers/all-roberta-large-v1", # High quality
-    
-    # Alternative embedding models
-    "bge_large": "BAAI/bge-large-en-v1.5",                 # State-of-the-art
-    "e5_large": "intfloat/e5-large-v2",                    # Multilingual
+    "mpnet": "sentence-transformers/all-mpnet-base-v2",
+    "distilbert": "sentence-transformers/all-distilroberta-v1", 
+    "minilm": "sentence-transformers/all-MiniLM-L6-v2",
+    "roberta": "sentence-transformers/all-roberta-large-v1",
+    "bge_large": "BAAI/bge-large-en-v1.5",
+    "e5_large": "intfloat/e5-large-v2",
 }
 
-# Selected model for embeddings
-EMBEDDING_MODEL = HF_EMBEDDING_MODELS["mpnet"]  # Change this to switch models
+EMBEDDING_MODEL = HF_EMBEDDING_MODELS["mpnet"]
 
-# Hugging Face Chat Models (for advanced chat if needed)
+# Chat models and other settings
 HF_CHAT_MODELS = {
     "phi3": "microsoft/Phi-3-mini-4k-instruct",
     "llama": "meta-llama/Llama-2-7b-chat-hf", 
     "mistral": "mistralai/Mistral-7B-Instruct-v0.1"
 }
 
-# Chat model (optional - can still use local Ollama as backup)
 CHAT_MODEL = HF_CHAT_MODELS["phi3"]
 
-# Ollama Configuration (backup for chat)
+# Ollama backup config
 OLLAMA_URL = "http://localhost:11434"
 OLLAMA_MODEL = "phi3:mini"
 
-# File Settings
+# File settings
 UPLOAD_FOLDER = "./data/uploads"
 VECTOR_STORE_PATH = "./data/vector_store"
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
-# Enhanced Scoring Weights
+# Scoring weights
 SCORING_WEIGHTS = {
-    "semantic": 0.5,           # HF embedding similarity
-    "keyword_categories": 0.35, # Category-specific matching
-    "tfidf": 0.15             # General text similarity
+    "semantic": 0.5,
+    "keyword_categories": 0.35,
+    "tfidf": 0.15
 }
 
-# Scoring Thresholds
+# Thresholds
 MIN_SCORE_THRESHOLD = 0.25
 TOP_CANDIDATES = 20
 
-# API Settings
-HF_TIMEOUT = 30  # seconds
+# API settings
+HF_TIMEOUT = 30
 MAX_RETRIES = 3
-CACHE_EMBEDDINGS = True  # Cache embeddings to reduce API calls
+CACHE_EMBEDDINGS = True
 
-# Comprehensive Job Templates (same as before)
-JOB_TEMPLATES: Dict[str, str] = {
-    "Data Scientist": """
-    Data Scientist position requiring expertise in machine learning algorithms, statistical modeling,
-    and advanced data analysis. Technical skills include: Python programming with pandas, numpy, and scipy,
-    SQL database management and complex query optimization, machine learning frameworks including 
-    scikit-learn, TensorFlow, and PyTorch, data visualization using matplotlib, seaborn, plotly, and Tableau.
-    
-    Experience with big data technologies: Apache Spark, Hadoop ecosystem, distributed computing,
-    cloud platforms including AWS (SageMaker, EC2, S3), Azure Machine Learning, or Google Cloud AI Platform.
-    Statistical expertise in hypothesis testing, A/B testing, experimental design, time series analysis,
-    regression modeling, classification algorithms, clustering techniques, and deep learning architectures.
-    
-    Strong mathematical background in statistics, linear algebra, calculus, and probability theory.
-    Business intelligence tools experience with Tableau, Power BI, Looker, or similar platforms.
-    Version control with Git, collaborative development practices, Jupyter notebooks, and model deployment.
-    """,
-    
-    "Marketing Analyst": """
-    Marketing Analyst role focusing on digital marketing analytics, campaign optimization, and customer insights.
-    Core technical skills: Google Analytics advanced implementation, Google Ads campaign management and optimization,
-    Facebook Ads Manager and Business Manager, marketing automation platforms including HubSpot, Marketo, or Pardot,
-    customer relationship management with Salesforce, HubSpot CRM, or similar platforms.
-    
-    Data analysis expertise: SQL for marketing database queries and customer segmentation, Excel and Google Sheets
-    for advanced modeling and pivot table analysis, data visualization using Tableau, Power BI, or Looker,
-    A/B testing implementation and statistical significance analysis, conversion rate optimization and funnel analysis,
-    customer lifetime value modeling, attribution modeling across multiple touchpoints and channels.
-    
-    Digital marketing channels expertise: search engine optimization (SEO) and search engine marketing (SEM),
-    social media advertising across platforms, email marketing performance tracking, campaign ROI measurement.
-    """,
-    
-    "Software Engineer": """
-    Software Engineer position requiring full-stack web development expertise and modern software architecture.
-    Programming languages: Python, JavaScript/TypeScript, Java, with frameworks including React, Node.js, Django, Flask,
-    Spring Boot, database design with MySQL, PostgreSQL, MongoDB, Redis caching, RESTful API development,
-    microservices architecture, Docker containerization, Kubernetes orchestration, cloud deployment on AWS/Azure/GCP.
-    
-    DevOps practices: CI/CD pipelines with Jenkins or GitHub Actions, infrastructure as code with Terraform,
-    monitoring and logging, version control with Git, agile development methodologies, test-driven development,
-    code review processes, system design and architecture planning, performance optimization and scalability.
-    """,
-    
-    "Product Manager": """
-    Product Manager role requiring strategic planning, user research, and cross-functional leadership.
-    Product strategy: roadmap development, market research, competitive analysis, user persona development,
-    customer journey mapping, product-market fit analysis, go-to-market strategy, pricing strategy,
-    product lifecycle management, stakeholder management, data-driven decision making.
-    
-    Technical collaboration: user experience research, A/B testing, product analytics with tools like
-    Google Analytics, Mixpanel, Amplitude, SQL for data analysis, wireframing with Figma or Sketch,
-    project management with Jira, Asana, agile methodologies, user story writing, backlog management.
-    """,
-    
-    "Business Analyst": """
-    Business Analyst position requiring process analysis, requirements gathering, and system optimization.
-    Analysis skills: business process mapping, workflow documentation, gap analysis, requirements analysis,
-    stakeholder interview facilitation, business requirements documentation, system testing coordination,
-    user acceptance testing, change management, vendor evaluation and selection.
-    
-    Technical skills: SQL for data analysis, Excel advanced functions, data visualization with Tableau or Power BI,
-    process modeling tools, ERP system knowledge, CRM system optimization, project management tools,
-    statistical analysis, KPI development and monitoring, executive reporting and presentation.
-    """
-}
-
-# Enhanced skill categories (same as before)
+# Your skill categories and job templates go here...
 SKILL_CATEGORIES = {
     'programming_languages': [
         'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'r', 'sql', 
@@ -168,13 +101,59 @@ SKILL_CATEGORIES = {
     ]
 }
 
-# Create directories
+# Job templates
+JOB_TEMPLATES = {
+    "Data Scientist": """
+    Data Scientist position requiring expertise in machine learning algorithms, statistical modeling,
+    and advanced data analysis. Technical skills include: Python programming with pandas, numpy, and scipy,
+    SQL database management and complex query optimization, machine learning frameworks including 
+    scikit-learn, TensorFlow, and PyTorch, data visualization using matplotlib, seaborn, plotly, and Tableau.
+    
+    Experience with big data technologies: Apache Spark, Hadoop ecosystem, distributed computing,
+    cloud platforms including AWS (SageMaker, EC2, S3), Azure Machine Learning, or Google Cloud AI Platform.
+    Statistical expertise in hypothesis testing, A/B testing, experimental design, time series analysis,
+    regression modeling, classification algorithms, clustering techniques, and deep learning architectures.
+    
+    Strong mathematical background in statistics, linear algebra, calculus, and probability theory.
+    Business intelligence tools experience with Tableau, Power BI, Looker, or similar platforms.
+    Version control with Git, collaborative development practices, Jupyter notebooks, and model deployment.
+    """,
+    
+    "Marketing Analyst": """
+    Marketing Analyst role focusing on digital marketing analytics, campaign optimization, and customer insights.
+    Core technical skills: Google Analytics advanced implementation, Google Ads campaign management and optimization,
+    Facebook Ads Manager and Business Manager, marketing automation platforms including HubSpot, Marketo, or Pardot,
+    customer relationship management with Salesforce, HubSpot CRM, or similar platforms.
+    
+    Data analysis expertise: SQL for marketing database queries and customer segmentation, Excel and Google Sheets
+    for advanced modeling and pivot table analysis, data visualization using Tableau, Power BI, or Looker,
+    A/B testing implementation and statistical significance analysis, conversion rate optimization and funnel analysis,
+    customer lifetime value modeling, attribution modeling across multiple touchpoints and channels.
+    
+    Digital marketing channels expertise: search engine optimization (SEO) and search engine marketing (SEM),
+    social media advertising across platforms, email marketing performance tracking, campaign ROI measurement.
+    """,
+    
+    "Software Engineer": """
+    Software Engineer position requiring full-stack web development expertise and modern software architecture.
+    Programming languages: Python, JavaScript/TypeScript, Java, with frameworks including React, Node.js, Django, Flask,
+    Spring Boot, database design with MySQL, PostgreSQL, MongoDB, Redis caching, RESTful API development,
+    microservices architecture, Docker containerization, Kubernetes orchestration, cloud deployment on AWS/Azure/GCP.
+    
+    DevOps practices: CI/CD pipelines with Jenkins or GitHub Actions, infrastructure as code with Terraform,
+    monitoring and logging, version control with Git, agile development methodologies, test-driven development,
+    code review processes, system design and architecture planning, performance optimization and scalability.
+    """
+}
+
+# Directory creation function
 def create_directories():
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
+    os.makedirs("./data/embeddings_cache", exist_ok=True)
     os.makedirs("./logs", exist_ok=True)
 
-# Model information for display
+# Model info function
 def get_model_info():
     model_name = EMBEDDING_MODEL.split('/')[-1] if '/' in EMBEDDING_MODEL else EMBEDDING_MODEL
     return {
@@ -189,21 +168,5 @@ def get_model_info():
             "Scalable cloud infrastructure", 
             "Reduced local memory usage",
             "Faster application startup"
-        ]
-    }
-
-def get_setup_instructions():
-    return {
-        "requirements": [
-            "Hugging Face account (free)",
-            "HF API token (free tier available)",
-            "Internet connection for API calls",
-            "Much lighter local requirements"
-        ],
-        "steps": [
-            "1. Create account at https://huggingface.co",
-            "2. Generate API token in Settings → Access Tokens",
-            "3. Set HUGGINGFACE_TOKEN in .env file",
-            "4. Run: streamlit run app.py"
         ]
     }
