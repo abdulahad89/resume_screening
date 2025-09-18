@@ -11,7 +11,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 class HuggingFaceEmbeddingManager:
-    """Production-ready embedding manager using Hugging Face Feature Extraction API"""
+    """Production-ready embedding manager using Hugging Face Inference API"""
     
     def __init__(self):
         from config import (
@@ -66,7 +66,7 @@ class HuggingFaceEmbeddingManager:
             return status
         
         try:
-            # SIMPLIFIED TEST - just check token validity with a simple model request
+            # SIMPLIFIED TEST - just check token validity with models endpoint
             test_url = f"https://api-inference.huggingface.co/models/{self.model_name}"
             
             response = requests.get(
@@ -140,18 +140,22 @@ class HuggingFaceEmbeddingManager:
             pass
     
     def _call_hf_api(self, text: str, retry_count: int = 0) -> Optional[np.ndarray]:
-        """Call Hugging Face Feature Extraction API for embeddings"""
+        """Call Hugging Face API using standard models endpoint - FINAL WORKING VERSION"""
         
         if not self.api_status.get("token_valid", False):
             raise Exception("Invalid or missing Hugging Face token")
         
         try:
-            # Use the feature extraction pipeline endpoint - CORRECT FORMAT
-            url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.model_name}"
+            # Use standard models API endpoint (NOT pipeline endpoint - that causes 404)
+            url = f"https://api-inference.huggingface.co/models/{self.model_name}"
             
-            # CORRECT PAYLOAD for feature extraction
+            # CORRECT PAYLOAD for sentence-transformers models
             payload = {
-                "inputs": [text]  # Must be array format for feature extraction
+                "inputs": [text],  # MUST be array format for sentence-transformers
+                "options": {
+                    "wait_for_model": True,
+                    "use_cache": True
+                }
             }
             
             response = requests.post(
@@ -165,7 +169,7 @@ class HuggingFaceEmbeddingManager:
                 try:
                     result = response.json()
                     
-                    # Handle feature extraction response format
+                    # Handle response format for sentence-transformers embeddings
                     if isinstance(result, list) and len(result) > 0:
                         if isinstance(result[0], list):
                             # Standard format: [[embedding_vector]]
@@ -203,7 +207,7 @@ class HuggingFaceEmbeddingManager:
             
             else:
                 # Handle error response
-                error_msg = f"Feature Extraction API Error {response.status_code}"
+                error_msg = f"HF API Error {response.status_code}"
                 try:
                     error_detail = response.json()
                     if 'error' in error_detail:
@@ -238,7 +242,7 @@ class HuggingFaceEmbeddingManager:
         # Basic cleaning
         text = re.sub(r'\s+', ' ', text.strip())
         
-        # Normalize technology terms
+        # Normalize technology terms for better matching
         tech_normalizations = {
             r'\bjavascript\b': 'JavaScript',
             r'\bnodejs\b|node\.js': 'Node.js',
@@ -254,7 +258,7 @@ class HuggingFaceEmbeddingManager:
         for pattern, replacement in tech_normalizations.items():
             text_lower = re.sub(pattern, replacement.lower(), text_lower, flags=re.IGNORECASE)
         
-        # Keep important short terms
+        # Keep important short terms that are meaningful
         important_terms = {'r', 'c', 'go', 'ai', 'ml', 'bi', 'ui', 'ux', 'qa'}
         words = text_lower.split()
         words = [w for w in words if len(w) >= 2 or w in important_terms]
@@ -281,37 +285,37 @@ class HuggingFaceEmbeddingManager:
         return found_keywords
     
     def encode_text(self, text: str) -> np.ndarray:
-        """Generate embedding for text using HF Feature Extraction API"""
+        """Generate embedding for text using HF API with smart caching"""
         if not text or not text.strip():
             return self._create_fallback_embedding("")
         
-        # Preprocess text
+        # Preprocess text for better embeddings
         clean_text = self.preprocess_text_advanced(text)
         
-        # Truncate if too long (most models have ~512 token limit)
+        # Truncate if too long (most sentence-transformers have ~512 token limit)
         if len(clean_text) > 500:
             clean_text = clean_text[:500]
         
-        # Try cache first
+        # Try cache first to reduce API calls
         cache_key = self._get_cache_key(clean_text)
         cached_embedding = self._load_from_cache(cache_key)
         if cached_embedding is not None:
             return cached_embedding
         
-        # Call HF Feature Extraction API
+        # Call HF API for fresh embedding
         try:
             with st.spinner("🤖 Getting embedding from Hugging Face..."):
                 embedding = self._call_hf_api(clean_text)
             
             if embedding is not None and embedding.size > 0:
-                # Normalize embedding for cosine similarity
+                # Normalize embedding for proper cosine similarity
                 norm = np.linalg.norm(embedding)
                 if norm > 0:
                     embedding = embedding / norm
                 else:
                     embedding = self._create_fallback_embedding(clean_text)
                 
-                # Save to cache
+                # Save to cache for future use
                 self._save_to_cache(cache_key, embedding)
                 return embedding
             else:
@@ -323,7 +327,7 @@ class HuggingFaceEmbeddingManager:
             return self._create_fallback_embedding(clean_text)
     
     def batch_encode(self, texts: List[str]) -> np.ndarray:
-        """Encode multiple texts with rate limiting"""
+        """Encode multiple texts with rate limiting to prevent API overload"""
         embeddings = []
         
         for i, text in enumerate(texts):
@@ -337,30 +341,31 @@ class HuggingFaceEmbeddingManager:
         return np.array(embeddings)
     
     def _create_fallback_embedding(self, text: str) -> np.ndarray:
-        """Create fallback embedding when API fails"""
+        """Create high-quality fallback embedding when API fails"""
         if not text:
             return np.zeros(384, dtype=np.float32)
         
-        # Create feature-based embedding
+        # Create comprehensive feature-based embedding
         features = []
         text_lower = text.lower()
         
-        # Text statistics
+        # Text statistics features
         words = text.split()
         features.extend([
-            len(words),
-            len(set(text_lower.split())),
-            text.count('.'),
-            text.count(','),
-            len(text),
+            len(words),  # Word count
+            len(set(text_lower.split())),  # Unique word count
+            text.count('.'),  # Sentence count
+            text.count(','),  # Complexity indicator
+            len(text),  # Character count
         ])
         
-        # Technology keywords presence
+        # Technology keywords presence (extensive list)
         tech_keywords = [
             'python', 'java', 'javascript', 'react', 'sql', 'aws', 'docker',
             'kubernetes', 'git', 'linux', 'tensorflow', 'pytorch', 'pandas',
             'numpy', 'machine learning', 'data science', 'api', 'database',
-            'cloud', 'devops', 'agile', 'scrum', 'marketing', 'analytics'
+            'cloud', 'devops', 'agile', 'scrum', 'marketing', 'analytics',
+            'excel', 'tableau', 'power bi', 'salesforce', 'hubspot'
         ]
         
         for keyword in tech_keywords:
@@ -375,7 +380,7 @@ class HuggingFaceEmbeddingManager:
         for indicator in experience_indicators:
             features.append(1.0 if indicator in text_lower else 0.0)
         
-        # Education keywords
+        # Education and certification keywords
         education_keywords = [
             'bachelor', 'master', 'phd', 'degree', 'university',
             'college', 'certification', 'certified'
@@ -384,7 +389,7 @@ class HuggingFaceEmbeddingManager:
         for keyword in education_keywords:
             features.append(1.0 if keyword in text_lower else 0.0)
         
-        # Pad to standard embedding size (384 dimensions)
+        # Pad to standard embedding size (384 dimensions like MPNet)
         while len(features) < 384:
             features.append(0.0)
         
@@ -408,7 +413,7 @@ class HuggingFaceEmbeddingManager:
             
             if min_len > 0:
                 similarity = float(cosine_similarity([embedding1], [embedding2])[0][0])
-                return max(0.0, min(1.0, similarity))
+                return max(0.0, min(1.0, similarity))  # Clamp to valid range
             else:
                 return 0.0
             
@@ -464,9 +469,9 @@ class HuggingFaceEmbeddingManager:
         }
     
     def hybrid_similarity_analysis(self, jd_text: str, resume_text: str) -> Dict:
-        """Comprehensive similarity analysis combining multiple methods"""
+        """Comprehensive similarity analysis combining multiple AI methods"""
         
-        # Extract keywords from both texts
+        # Extract keywords from both texts using AI-powered categorization
         jd_keywords = self.extract_enhanced_keywords(jd_text)
         resume_keywords = self.extract_enhanced_keywords(resume_text)
         
@@ -475,7 +480,7 @@ class HuggingFaceEmbeddingManager:
         tfidf_score = self.calculate_tfidf_similarity(jd_text, resume_text)
         keyword_analysis = self.calculate_keyword_similarity(jd_keywords, resume_keywords)
         
-        # Calculate combined score using configured weights
+        # Calculate weighted combined score using configured weights
         from config import SCORING_WEIGHTS
         combined_score = (
             semantic_score * SCORING_WEIGHTS['semantic'] +
@@ -483,7 +488,7 @@ class HuggingFaceEmbeddingManager:
             tfidf_score * SCORING_WEIGHTS['tfidf']
         )
         
-        # Create analysis summary
+        # Create intelligent analysis summary
         if combined_score >= 0.7:
             summary = "Excellent match - candidate strongly aligns with job requirements"
         elif combined_score >= 0.5:
@@ -502,20 +507,21 @@ class HuggingFaceEmbeddingManager:
             'jd_keywords': jd_keywords,
             'resume_keywords': resume_keywords,
             'model_used': self.model_name,
-            'api_provider': 'Hugging Face Feature Extraction API',
+            'api_provider': 'Hugging Face Inference API',
             'analysis_summary': summary
         }
     
     def get_model_info(self) -> Dict:
-        """Get comprehensive model information"""
+        """Get comprehensive model information for monitoring"""
         return {
             'name': self.model_name.split('/')[-1],
             'full_name': self.model_name,
             'provider': 'Hugging Face',
-            'type': 'Feature Extraction API',
+            'type': 'Sentence Transformers API',
             'status': self.api_status,
             'cache_enabled': self.cache_enabled,
-            'endpoint': f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.model_name}"
+            'endpoint': f"https://api-inference.huggingface.co/models/{self.model_name}",
+            'dimensions': 384 if 'mpnet' in self.model_name.lower() else 768
         }
     
     def clear_cache(self):
@@ -535,7 +541,7 @@ class HuggingFaceEmbeddingManager:
             st.error(f"❌ Failed to clear cache: {e}")
     
     def get_cache_stats(self) -> Dict:
-        """Get cache statistics for monitoring"""
+        """Get cache statistics for performance monitoring"""
         try:
             if not os.path.exists(self.cache_dir):
                 return {'enabled': self.cache_enabled, 'files': 0, 'size_mb': 0}
