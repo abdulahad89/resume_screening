@@ -21,7 +21,7 @@ HF_EMBEDDING_MODELS = {
 }
 
 # Use the best embedding model (MPNet - highest quality)
-EMBEDDING_MODEL = HF_EMBEDDING_MODELS["mpnet"]
+EMBEDDING_MODEL = HF_EMBEDDING_MODELS["bge_large"]
 
 # Chat models (optional for AI chat feature)
 HF_CHAT_MODELS = {
